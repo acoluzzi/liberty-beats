@@ -1,11 +1,13 @@
-import * as Tone from 'tone'
 import { RootStore } from '../../../store'
-import { TimeUtils } from '../utils/time-utils'
 import { setCurrentTickFromSequencer } from '../../../features/daw/playlist-header/store/playlist-header-slice'
 import { setTime } from '../../../features/daw/player-bar/store/playerBarSlice'
 import { observeStore } from '../../../store/observers'
 import { selectRequestedNewTickPosition } from '../../../features/daw/playlist-header/store/selectors'
 import { selectBpm } from '../../../features/daw/player-bar/store/selectors'
+import { transport } from '../../audio/transport'
+
+// Emit UI updates on every 16th note (1 tick).
+const UI_TICK_INTERVAL = 1
 
 export class Clock {
   currentTick: number
@@ -20,11 +22,11 @@ export class Clock {
     this._time = 0
     this.currentTick = 0
 
-    Tone.Transport.bpm.value = this._bpm
+    transport.setBpm(this._bpm)
 
-    Tone.Transport.scheduleRepeat(() => {
+    transport.scheduleRepeat(() => {
       this.handleTick()
-    }, '16n')
+    }, UI_TICK_INTERVAL)
 
     this.registerStoreListeners()
   }
@@ -32,10 +34,10 @@ export class Clock {
   requestNewTickPosition(newTick: number | null) {
     if (newTick === null) return
 
-    Tone.Transport.position = TimeUtils.tickToToneTime(newTick)
-    this.getTickAndTimeFromToneTransport()
+    transport.seekTicks(newTick)
+    this.readPositionFromTransport()
 
-    if (Tone.Transport.state !== 'started') {
+    if (transport.state !== 'started') {
       // will trigger store update ONLY if transport is not playing so to not collide with the handleTick method
       this.notifyStore()
     }
@@ -53,18 +55,17 @@ export class Clock {
 
   private handleRequestedNewBpm(newBpm: number) {
     this._bpm = newBpm
-    Tone.Transport.bpm.value = this._bpm
+    transport.setBpm(this._bpm)
   }
 
   private handleTick() {
-    this.getTickAndTimeFromToneTransport()
+    this.readPositionFromTransport()
     this.notifyStore()
   }
 
-  private getTickAndTimeFromToneTransport() {
-    this.currentTick = TimeUtils.toneTimeToTicks(Tone.Transport.position)
-    // sometimes the transport position is negative, so we need to clamp it to 0
-    this._time = Math.max(Tone.Transport.seconds, 0)
+  private readPositionFromTransport() {
+    this.currentTick = Math.floor(transport.positionTicks)
+    this._time = Math.max(transport.seconds, 0)
   }
 
   private notifyStore() {

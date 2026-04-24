@@ -1,14 +1,18 @@
-import * as Tone from 'tone'
 import { RootStore } from '../../store'
 import { observeStore } from '../../store/observers'
 import { selectVolume } from '../../features/daw/player-bar/store/selectors'
+import {
+  dbToGain,
+  gainToDb,
+  getAudioContext,
+  getMasterGain,
+} from '../audio/engine'
 
 export class Volume {
   private _store: RootStore
 
   constructor(store: RootStore) {
     this._store = store
-
     this.registerStoreListeners()
   }
 
@@ -17,10 +21,20 @@ export class Volume {
   }
 
   setVolume(volume: number) {
-    Tone.Destination.volume.value = Volume.transformVolumeToToneVolume(volume)
+    const db = Volume.transformVolumeToToneVolume(volume)
+    const master = getMasterGain()
+    master.gain.setTargetAtTime(
+      dbToGain(db),
+      getAudioContext().currentTime,
+      0.01
+    )
   }
 
+  /**
+   * Retained name for compatibility with callers that display volume in dB.
+   * Converts the 0..N linear volume value into decibels (log scale).
+   */
   static transformVolumeToToneVolume(volume: number) {
-    return Tone.gainToDb(volume / 100)
+    return gainToDb(volume / 100)
   }
 }

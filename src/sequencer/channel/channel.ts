@@ -2,17 +2,23 @@ import { Bar } from '../../model/bar/bar'
 import { InstrumentPreset } from '../../model/instrument/preset/preset'
 import { Note } from '../../model/note/note'
 import { Track } from '../../model/track/track'
-import * as Tone from 'tone'
 import { TimeUtils } from '../time/utils/time-utils'
 import { ChannelInstrument } from './instrument/channel-instrument'
 import { createChannelInstrument } from './instrument/channel-instrument-factory'
 import { Key } from '../../model/note/key/key'
+import { Part } from '../audio/transport'
+
+type PartNoteValue = {
+  duration: string
+  note: Key
+  velocity: number
+}
 
 export class Channel {
   trackId: string
 
-  private _parts: Tone.Part[] = []
-  private _previewLoopPart: Tone.Part | null = null
+  private _parts: Part<PartNoteValue>[] = []
+  private _previewLoopPart: Part<PartNoteValue> | null = null
   private _instrument: ChannelInstrument | null = null
   private _muted: boolean
 
@@ -63,16 +69,20 @@ export class Channel {
     this._parts = trackBars.map((bar) => this.partFromBar(bar))
   }
 
-  partFromBar(bar: Bar, isPreviewLoopBar: boolean = false) {
-    const sequencerNotes = bar.notes.map(this.noteToTone.bind(this))
-    const part = new Tone.Part(
-      (time, value: ReturnType<typeof this.noteToTone>) => {
-        if (!this._canPlayPartNote(isPreviewLoopBar)) return
-        this._instrument?.play(value.note, value.duration, time, value.velocity)
+  partFromBar(bar: Bar, isPreviewLoopBar: boolean = false): Part<PartNoteValue> {
+    const events = bar.notes.map((note) => ({
+      tick: note.startsAtRelativeTick,
+      value: {
+        duration: TimeUtils.tickToToneTime(note.durationTicks),
+        note: note.key,
+        velocity: note.velocity / 100,
       },
-      sequencerNotes
-    )
-    part.start(TimeUtils.tickToToneTime(bar.startAtTick))
+    }))
+    const part = new Part<PartNoteValue>((time, value) => {
+      if (!this._canPlayPartNote(isPreviewLoopBar)) return
+      this._instrument?.play(value.note, value.duration, time, value.velocity)
+    }, events)
+    part.start(bar.startAtTick)
     return part
   }
 
@@ -103,6 +113,7 @@ export class Channel {
     return true
   }
 
+  // kept for parity with the previous API — consumers may still import it.
   noteToTone(note: Note) {
     return {
       time: TimeUtils.tickToToneTime(note.startsAtRelativeTick),

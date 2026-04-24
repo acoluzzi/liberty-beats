@@ -1,7 +1,6 @@
 import { RootStore } from '../store'
 import { observeStore } from '../store/observers'
 
-import * as Tone from 'tone'
 import {
   selectTrackIdInPlayingPreviewloop,
   selectPlayingTrackKeys,
@@ -14,6 +13,12 @@ import { Channel } from './channel/channel'
 import { Clock } from './time/clock/clock'
 import { Metronome } from './metronome/metronome'
 import { Volume } from './volume/volume'
+import { startAudio } from './audio/engine'
+import { transport } from './audio/transport'
+
+// Preview-loop length, in 16th-note ticks (1 measure).
+const PREVIEW_LOOP_TICKS = 16
+
 export default class Sequencer {
   private _store: RootStore
   private _channelsByTrackID: Map<string, Channel> = new Map()
@@ -71,9 +76,9 @@ export default class Sequencer {
           this._lastClockPositionBeforeLoop = this._clock.currentTick
           this._clock.requestNewTickPosition(0)
 
-          Tone.Transport.loop = true
-          Tone.Transport.loopStart = 0
-          Tone.Transport.loopEnd = '1m'
+          transport.loop = true
+          transport.loopStartTicks = 0
+          transport.loopEndTicks = PREVIEW_LOOP_TICKS
 
           this._channelsByTrackID.forEach((channel) => {
             if (channel.trackId === previewLoopPlayingTrackId) {
@@ -87,7 +92,7 @@ export default class Sequencer {
           this.startTracks()
         } else {
           this.stop()
-          Tone.Transport.loop = false
+          transport.loop = false
           this._clock.requestNewTickPosition(this._lastClockPositionBeforeLoop)
 
           this._channelsByTrackID.forEach((channel) => {
@@ -104,8 +109,8 @@ export default class Sequencer {
   }
 
   async startTracks() {
-    await Tone.start()
-    Tone.Transport.start()
+    await startAudio()
+    transport.start()
   }
 
   generateTracks(newTracks: Readonly<Track[]>) {
@@ -120,10 +125,10 @@ export default class Sequencer {
   }
 
   stop() {
-    Tone.Transport.stop()
+    transport.stop()
   }
 
   pause() {
-    Tone.Transport.pause()
+    transport.pause()
   }
 }
