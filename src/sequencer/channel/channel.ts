@@ -25,6 +25,13 @@ export class Channel {
   private _otherTrackIsPreviewing: boolean = false
   private _isPreviewingLoop: boolean = false
 
+  // Cached references from the last applied track. Compared with the next
+  // track via Immer's structural sharing so we only mutate the audio graph
+  // for the parts that actually changed (preset / bars / volume / mute).
+  private _lastPresetId: string | null = null
+  private _lastBars: Readonly<Bar[]> | null = null
+  private _lastVolume: number | null = null
+
   constructor(track: Track) {
     this.trackId = track.id
     this._muted = false
@@ -32,17 +39,44 @@ export class Channel {
   }
 
   updateFromTrack(track: Track) {
-    if (!this.hasChanged(track)) {
-      return
-    }
-    this.clear()
+    const presetChanged = this._lastPresetId !== track.instrumentPreset.id
+    const barsChanged = this._lastBars !== track.bars
+    const volumeChanged = this._lastVolume !== track.volume
+
+    // Mute / solo: cheap flag flip, always safe to apply.
     this.setMuted(
       track.muted || (track.areThereAnyOtherTrackSoloed && !track.soloed)
     )
-    this.setInstrument(track.instrumentPreset)
-    this.generatePartsFromBars(track.bars)
-    this.setVolume(track.volume)
-    this.connect()
+
+    if (presetChanged) {
+      // Replacing the instrument is the only path that disconnects audio
+      // nodes, so confine it to actual preset changes (rare).
+      this._instrument?.disconnect()
+      this._parts.forEach((p) => p.dispose())
+      this._parts = []
+      this.setInstrument(track.instrumentPreset)
+      this.connect()
+      this._lastPresetId = track.instrumentPreset.id
+      // After a fresh instrument we must recreate parts and resend volume
+      this.generatePartsFromBars(track.bars)
+      this._lastBars = track.bars
+      this.setVolume(track.volume)
+      this._lastVolume = track.volume
+      return
+    }
+
+    if (barsChanged) {
+      // Swap parts in place — instrument stays connected, no audio dropout.
+      this._parts.forEach((p) => p.dispose())
+      this._parts = []
+      this.generatePartsFromBars(track.bars)
+      this._lastBars = track.bars
+    }
+
+    if (volumeChanged) {
+      this.setVolume(track.volume)
+      this._lastVolume = track.volume
+    }
   }
 
   setVolume(volume: number) {
@@ -60,8 +94,12 @@ export class Channel {
   clear() {
     this._parts.forEach((part) => part.dispose())
     this._parts = []
-
+    this._previewLoopPart?.dispose()
+    this._previewLoopPart = null
     this._instrument?.disconnect()
+    this._lastPresetId = null
+    this._lastBars = null
+    this._lastVolume = null
   }
 
   generatePartsFromBars(trackBars: Readonly<Bar[]>) {
@@ -105,12 +143,6 @@ export class Channel {
 
   connect() {
     this._instrument?.connect()
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  hasChanged(_newTrack: Track) {
-    // TODO compare new track with the current settings (maybe trying with an hash of the track?)
-    return true
   }
 
   // kept for parity with the previous API — consumers may still import it.
