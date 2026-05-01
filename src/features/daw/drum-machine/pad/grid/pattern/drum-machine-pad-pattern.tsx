@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { TrackDrumPatternSound } from '../../../../../../model/track/drums/track-drums'
 import { TRACK_COLORS } from '../../../../../../model/track/track-color'
 
@@ -12,7 +13,7 @@ export type DrumMachinePadPatternProps = {
   ) => void
 }
 
-export const DrumMachinePadPattern = ({
+const DrumMachinePadPatternComponent = ({
   patternSounds,
   soundIndex,
   onSoundChange,
@@ -50,3 +51,5 @@ export const DrumMachinePadPattern = ({
     </div>
   )
 }
+
+export const DrumMachinePadPattern = memo(DrumMachinePadPatternComponent)

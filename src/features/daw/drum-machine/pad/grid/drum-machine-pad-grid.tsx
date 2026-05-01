@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import { TrackDrumPatternSound } from '../../../../../model/track/drums/track-drums'
 import { selectCurrentTick } from '../../../playlist-header/store/selectors'
@@ -22,6 +23,24 @@ export const DrumMachinePadGrid = ({
 
   const activeTickBar = previewLoopPlayingTrackId ? currentTick : null
 
+  const handleSoundChange = useCallback(
+    (
+      toChangeSoundIndex: number,
+      toChangeBeatIndex: number,
+      newValue: TrackDrumPatternSound
+    ) => {
+      const newPattern = selectedPatternBeats.map((soundBeats, soundIndex) =>
+        soundIndex === toChangeSoundIndex
+          ? soundBeats.map((sound, beatIndex) =>
+              beatIndex === toChangeBeatIndex ? newValue : sound
+            )
+          : soundBeats
+      )
+      onUpdateCurrentPattern(newPattern)
+    },
+    [selectedPatternBeats, onUpdateCurrentPattern]
+  )
+
   return (
     <div className="flex flex-col gap-1">
       {selectedPatternBeats.map((patternSounds, soundIndex) => (
@@ -30,17 +49,7 @@ export const DrumMachinePadGrid = ({
           patternSounds={patternSounds}
           activeTickBar={activeTickBar}
           soundIndex={soundIndex}
-          onSoundChange={(toChangeSoundIndex, toChangeBeatIndex, newValue) => {
-            const newPattern = selectedPatternBeats.map(
-              (soundBeats, soundIndex) =>
-                soundIndex === toChangeSoundIndex
-                  ? soundBeats.map((sound, beatIndex) =>
-                      beatIndex === toChangeBeatIndex ? newValue : sound
-                    )
-                  : soundBeats
-            )
-            onUpdateCurrentPattern(newPattern)
-          }}
+          onSoundChange={handleSoundChange}
         />
       ))}
     </div>
